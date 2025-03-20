@@ -1,52 +1,57 @@
-//
-var admin = require('firebase-admin');
-// 1. Download a service account key (JSON file) from your Firebase console and add to the example/scripts directory
+const express = require('express');
+const admin = require('firebase-admin');
+const bodyParser = require('body-parser');
+
+// Initialize Firebase Admin SDK
 var serviceAccount = require('./google-services.json');
+
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
 
-// 2. Copy the token for your device that is printed in the console on app start (`flutter run`) for the FirebaseMessaging example
-const token = 'cdewHf0NQZS_h5oaeaJSZo:APA91bEzapO1q3tXfp8O7PRdF_bf5i0eZrEWh7Wb2o5-NgA3tWEMpoVgkWo65WapfDtArd4RgbyJs4Uo-ORkWbTGNY9Fb3wXjZ48vOYUdoP10IDPSs57j8I';
+const app = express();
+const PORT = process.env.PORT || 3000;
 
+// Middleware to parse JSON
+app.use(bodyParser.json());
 
-// 3. From your terminal, root to example/scripts directory & run `npm install`.
-// 4. Run `npm run send-message` in the example/scripts directory and your app will receive messages in any state; foreground, background, terminated.
-// If you find your messages have stopped arriving, it is extremely likely they are being throttled by the platform. iOS in particular
-// are aggressive with their throttling policy.
-admin
-  .messaging()
-  .send(
-    {
-      token: token,
-      data: {
-        foo: 'bar',
-      },
-      notification: {
-        title: 'A great title',
-        body: 'Great content',
-      },
-      android: {
-        // Required for background/terminated app state messages on Android
-        priority: 'high',
-      },
-      apns: {
-        payload: {
-          aps: {
-            // Required for background/terminated app state messages on iOS
-            contentAvailable: true,
-          },
+// POST API to send notification
+app.post('/send-message', async (req, res) => {
+  const { title, body, token } = req.body;
+
+  if (!title || !body || !token) {
+    return res.status(400).json({ error: 'title, body, and token are required' });
+  }
+
+  const message = {
+    token: token,
+    notification: {
+      title: title,
+      body: body,
+    },
+    android: {
+      priority: 'high',
+    },
+    apns: {
+      payload: {
+        aps: {
+          contentAvailable: true,
         },
       },
     },
-  )
-  .then((res) => {
-    if (res.failureCount) {
-      console.log('Failed', res.results[0].error);
-    } else {
-      console.log('Success');
-    }
-  })
-  .catch((err) => {
-    console.log('Error:', err);
-  });
+  };
+
+  try {
+    const response = await admin.messaging().send(message);
+    console.log('Notification sent successfully:', response);
+    res.status(200).json({ success: true, response });
+  } catch (error) {
+    console.error('Error sending notification:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Start the Express server
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
